@@ -1,0 +1,17 @@
+from radare2
+
+aaa
+afl 
+s sym.check_key
+
+	0x00000821	string length < 7 jump nopes <3
+	hint		string length > 7
+
+	0x00000833	string length <= oxa -> string <=10
+	hint 		string length <= 10
+
+	0x00000895	dword > 0x3e7
+	string > 999
+
+
+7 < password length <= 10
