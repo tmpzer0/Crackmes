@@ -1,0 +1,106 @@
+Using radare2
+
+[0x000011a0]> aaa
+[x] Analyze all flags starting with sym. and entry0 (aa)
+[x] Analyze function calls (aac)
+[x] Analyze len bytes of instructions for references (aar)
+[x] Check for vtables
+[x] Type matching analysis for all functions (aaft)
+[x] Propagate noreturn information
+[x] Use -AA or aaaa to perform additional experimental analysis.
+[0x000011a0]> afl
+0x000011a0    1 46           entry0
+0x000011d0    4 41   -> 34   sym.deregister_tm_clones
+0x00001200    4 57   -> 51   sym.register_tm_clones
+0x00001240    5 65   -> 55   sym.__do_global_dtors_aux
+0x00001290    1 9            entry.init0
+0x00001000    3 27           sym._init
+0x00001310    1 5            sym.__libc_csu_fini
+0x00001318    1 13           sym._fini
+0x000012a0    4 101          sym.__libc_csu_init
+0x00001080   19 286          main
+0x00001030    1 6            sym.imp.puts
+0x00001040    1 6            sym.imp.__stack_chk_fail
+0x00001050    1 6            sym.imp.printf
+0x00001060    1 6            sym.imp.__isoc99_scanf
+0x00001070    1 6            sym.imp.sqrt
+
+s main
+
+After the scanf it checks the first char and compares it with 0x72
+
+│           0x000010bc      e89fffffff     call sym.imp.__isoc99_scanf ;[3] ; int scanf(const char *format)
+│           0x000010c1      807c240a72     cmp byte [var_ah], 0x72	<----------- 0x72 = 'r'
+│       ┌─< 0x000010c6   *  7514           jne 0x10dc <-------0x10dc the ending string
+
+so the first char of the flag is 'r' #ascii 0x72 -> 'r'
+
+I did the same for the rest of the password that had ascii hints
+
+│ ╎╎╎╎╎╎╎   0x00001133      3c71           cmp al, 0x71			<--- 'q'
+│ ────────< 0x00001135      77a5           ja 0x10dc
+│ ╎╎╎╎╎╎╎   0x00001137      807c240e69     cmp byte [var_eh], 0x69 	<--- 'i'
+│ ────────< 0x0000113c      759e           jne 0x10dc
+│ ╎╎╎╎╎╎╎   0x0000113e      807c240f64     cmp byte [var_fh], 0x64	<--- 'd'
+│ ────────< 0x00001143      7597           jne 0x10dc
+│ ╎╎╎╎╎╎╎   0x00001145   *  807c241069     cmp byte [var_10h], 0x69	<--- 'i'
+│ └───────< 0x0000114a      7590           jne 0x10dc
+│  ╎╎╎╎╎╎   0x0000114c      807c24116e     cmp byte [var_11h], 0x6e	<--- 'n'
+│  └──────< 0x00001151      7589           jne 0x10dc
+│   ╎╎╎╎╎   0x00001153      807c241267     cmp byte [var_12h], 0x67	<--- 'g'
+│   └─────< 0x00001158      7582           jne 0x10dc
+│    ╎╎╎╎   0x0000115a      807c241368     cmp byte [var_13h], 0x68	<--- 'h'
+│    └────< 0x0000115f      0f8577ffffff   jne 0x10dc
+│     ╎╎╎   0x00001165      807c24146f     cmp byte [var_14h], 0x6f	<--- 'o'
+│     └───< 0x0000116a      0f856cffffff   jne 0x10dc
+│      ╎╎   0x00001170      807c24156f     cmp byte [var_15h], 0x6f	<--- 'o'
+│      └──< 0x00001175      0f8561ffffff   jne 0x10dc
+│       ╎   0x0000117b      807c241664     cmp byte [var_16h], 0x64	<--- 'd'
+│       └─< 0x00001180      0f8556ffffff   jne 0x10dc
+
+The only thing that was missing was 2 digit
+
+1
+│       │   0x000010c7  ~   1466           adc al, 0x66
+│       │   0x000010c8      660fbe44240b   movsx ax, byte [var_bh]
+│       │   0x000010ce      ba0a000000     mov edx, 0xa
+│       │   0x000010d3      f6fa           idiv dl
+│       │   0x000010d5      0fb6c4         movzx eax, ah
+│       │   0x000010d8      2c01           sub al, 1
+│      ┌──< 0x000010da   *  7429           je 0x1105
+
+2
+│   │╎╎╎╎   0x00001105   *  0fbe44240c     movsx eax, byte [var_ch]
+│   │╎╎╎╎   0x0000110a      660fefc0       pxor xmm0, xmm0
+│   │╎╎╎╎   0x0000110e      f20f2ac0       cvtsi2sd xmm0, eax
+│   │╎╎╎╎   0x00001112      e859ffffff     call sym.imp.sqrt           ;[2] ; floating_point sqrt(arithmetic x)
+│   │╎╎╎╎   0x00001117      f20f5905990f.  mulsd xmm0, qword [0x000020b8]
+│   │╎╎╎╎   0x0000111f      660f2e05990f.  ucomisd xmm0, qword [0x000020c0]
+│   │└────< 0x00001127      7ab3           jp 0x10dc
+│   │ └───< 0x00001129      75b1           jne 0x10dc
+
+
+So the passwd is something like:r__qidinghood
+
+I created a 2 digit wordlist using crunch and used it to brute force the flag
+
+crunch 2 2 <alphanumeric> 
+
+Using iz from radare2 it was easy to find the output for printing the correct flags
+
+[0x000010ef]> iz
+[Strings]
+nth paddr      vaddr      len size section type  string
+―――――――――――――――――――――――――――――――――――――――――――――――――――――――
+0   0x00002008 0x00002008 45  46   .rodata ascii The forest is dark and dangerous. Be careful!
+1   0x00002038 0x00002038 40  41   .rodata ascii You escaped the forest.\nFlag is correct. 	<-------- stdout condition 
+2   0x00002068 0x00002068 44  45   .rodata ascii The forest is unforgiving.\nFlag not correct.
+3   0x00002095 0x00002095 22  23   .rodata ascii Please enter the flag:
+4   0x000020ac 0x000020ac 4   5    .rodata ascii %13s
+
+
+Thanks to MKesenheimer for creating this crackmes
+
+
+tmpzer0
+:q!
